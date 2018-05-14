@@ -13,11 +13,11 @@ const source = fs.readFileSync(tplPath);
 const template = Handlebars.compile(source.toString());
 module.exports = async function (req, res, filePath) {
     try {
-        const stats = await stat(filePath);
+        const stats = await stat(decodeURI(filePath));
         if (stats.isFile()) {
             res.statusCode = 200;
             res.setHeader('Content-Type', mime(filePath));
-            let rs=fs.createReadStream(filePath);
+            let rs=fs.createReadStream(decodeURI(filePath));
             if(filePath.match(config.compress)){
                 rs=compress(rs,req,res);
             }
