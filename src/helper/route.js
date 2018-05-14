@@ -4,31 +4,43 @@ const Handlebars = require('handlebars');
 const promisify = require('util').promisify;
 const stat = promisify(fs.stat);
 const readdir = promisify(fs.readdir);
-const config = require('../config/defaultConfig');
-const mime=require('./mime');
-const compress=require('./compress');
-const range=require('./range');
+const mime = require('./mime');
+const compress = require('./compress');
+const range = require('./range');
+const isFresh = require('./cache');
 
 const tplPath = path.join(__dirname, '../template/dir.html');
 const source = fs.readFileSync(tplPath);
 const template = Handlebars.compile(source.toString());
-module.exports = async function (req, res, filePath) {
+module.exports = async function (req, res, filePath,config) {
     try {
         const stats = await stat(decodeURI(filePath));
         if (stats.isFile()) {
-            
+
             res.setHeader('Content-Type', mime(filePath));
-            let rs;
-            const {code,start,end}=range(stats.size,req,res);
-            if(code===200){
-                res.statusCode = 200;
-                rs=fs.createReadStream(decodeURI(filePath));
-            }else{
-                res.statusCode = 206;
-                rs=fs.createReadStream(decodeURI(filePath),{start,end});
+            if (isFresh(stats, req, res)) {
+                res.statusCode = 304;
+                res.end();
+                return;
             }
-            if(filePath.match(config.compress)){
-                rs=compress(rs,req,res);
+            let rs;
+            const {
+                code,
+                start,
+                end
+            } = range(stats.size, req, res);
+            if (code === 200) {
+                res.statusCode = 200;
+                rs = fs.createReadStream(decodeURI(filePath));
+            } else {
+                res.statusCode = 206;
+                rs = fs.createReadStream(decodeURI(filePath), {
+                    start,
+                    end
+                });
+            }
+            if (filePath.match(config.compress)) {
+                rs = compress(rs, req, res);
             }
             rs.pipe(res);
         } else if (stats.isDirectory()) {
@@ -37,10 +49,10 @@ module.exports = async function (req, res, filePath) {
             const data = {
                 title: path.basename(filePath),
                 dir: dir ? `/${dir}` : '',
-                files:files.map(file=>{
+                files: files.map(file => {
                     return {
-                        file:file,
-                        icon:mime(file)
+                        file: file,
+                        icon: mime(file)
                     }
                 })
             }
